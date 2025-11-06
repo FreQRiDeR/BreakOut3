@@ -1,5 +1,4 @@
 # BreakOut3
-A Python based Squash like game where you eliminate blocks by hitting them with a ball. 
 
 <div align="center">
              <img src="/breakout.png" width="500" />
@@ -7,7 +6,8 @@ A Python based Squash like game where you eliminate blocks by hitting them with 
 
 BREAKOUT3 WRITTEN IN PYTHON
 
-* For macOS, Debian based Linux
+* A Python based game where you eliminate blocks by hitting them with a ball. 
+* For macOS, Debian based Linux.
 * Uses pygame, pyinstaller to build play.
 * To run the project from source, from working directory:
 
