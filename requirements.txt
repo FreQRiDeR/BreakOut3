@@ -1,0 +1,11 @@
+# BreakOut3 Game Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core game engine
+pygame>=2.5.0
+
+# For building standalone executables
+pyinstaller>=6.0.0
+
+# Optional: For better cross-platform compatibility
+pillow>=10.0.0
