@@ -1,7 +1,6 @@
-# BreakOut3
-
 <div align="center">
              <img src="/breakout.png" width="500" />
+             <h1>BreakOut3</h1>
 </div>
 
 
