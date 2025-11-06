@@ -4,6 +4,7 @@
              <img src="/breakout.png" width="500" />
 </div>
 
+
 BREAKOUT3 WRITTEN IN PYTHON
 
 * A Python based game where you eliminate blocks by hitting them with a ball. 
