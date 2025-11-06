@@ -2,7 +2,7 @@
 A Python based Squash like game where you eliminate blocks by hitting them with a ball. 
 
 <div align="center">
-             <img src="/breakout3.png" width="500" />
+             <img src="/breakout.png" width="500" />
 </div>
 
 BREAKOUT3 WRITTEN IN PYTHON
