@@ -10,7 +10,7 @@ echo ""
 
 # Configuration
 APP_NAME="breakout3"
-APP_VERSION="1.0.0"
+APP_VERSION="1.1.0"
 APP_DISPLAY_NAME="BreakOut3"
 MAINTAINER="FreqRider <your.email@example.com>"
 DESCRIPTION="Classic Breakout arcade game built with Pygame"
