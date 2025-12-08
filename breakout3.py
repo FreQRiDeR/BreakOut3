@@ -7,20 +7,20 @@ import os
 def resource_path(relative_path):
     """Get absolute path to resource, works for dev and for PyInstaller"""
     try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
     except Exception:
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
 # Initialize Pygame and the mixer
-# pre_init helps avoid sound lag on some systems
 pygame.mixer.pre_init(44100, -16, 2, 512) 
 pygame.init()
 pygame.mixer.init()
 
 screen_width = 650
-screen_height = 650
+game_height = 650          # Original game area height
+touchpad_height = 200      # Dedicated touchpad area
+screen_height = game_height + touchpad_height
 
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption('Breakout')
@@ -33,19 +33,18 @@ except Exception as e:
     print(f"Could not load custom icon: {e}")
 
 # define font
-font = pygame.font.SysFont('Constantia', 30)
+font = pygame.font.SysFont('Impact', 30)
+title_font = pygame.font.SysFont('Impact', 75,)  # New larger bold font for title
 
 # define colours
 bg = (0, 0, 0)
-# block colours
 block_red = (255, 27, 145)
 block_green = (139, 255, 74)
 block_blue = (0, 188, 255)
-# paddle colours
 paddle_col = (171, 71, 188)
 paddle_outline = (171, 71, 188)
-# text colour
 text_col = (0, 251, 115)
+touchpad_bg = (40, 40, 40)
 
 # define game variables
 cols = 6
@@ -56,11 +55,10 @@ live_ball = False
 game_over = 0 # 0 is playing, 1 is won, -1 is lost
 
 # -----------------------------------------------------
-# Sound Loading Section - Now using WAV files
+# Sound Loading Section
 # -----------------------------------------------------
 sounds_loaded = False
 try:
-    # Try .wav files first (converted format) - using resource_path for PyInstaller
     SND_PADDLE = pygame.mixer.Sound(resource_path('sounds/ball.wav'))
     SND_BLOCK = pygame.mixer.Sound(resource_path('sounds/block.wav'))
     SND_GAMEOVER = pygame.mixer.Sound(resource_path('sounds/lost.wav'))
@@ -69,7 +67,6 @@ try:
     print("✓ All sound files loaded successfully (WAV format)!")
 except:
     try:
-        # Fall back to original formats
         SND_PADDLE = pygame.mixer.Sound(resource_path('sounds/ball.aif'))
         SND_BLOCK = pygame.mixer.Sound(resource_path('sounds/block.caf'))
         SND_GAMEOVER = pygame.mixer.Sound(resource_path('sounds/lost.aif'))
@@ -79,10 +76,6 @@ except:
     except pygame.error as e:
         print(f"⚠️  Error loading sound files: {e}")
         print("Game will continue without sounds.")
-        print("\nTo fix this, convert your sounds to WAV format:")
-        print("1. Install ffmpeg: brew install ffmpeg")
-        print("2. Run the converter script to create .wav files")
-        # Create dummy sound objects
         class DummySound:
             def play(self): pass
         SND_PADDLE = DummySound()
@@ -90,12 +83,16 @@ except:
         SND_GAMEOVER = DummySound()
         SND_WIN = DummySound()
 
-
 # function for outputting text onto the screen
 def draw_text(text, text_font, text_column, x, y):
     img = text_font.render(text, True, text_column)
     screen.blit(img, (x, y))
 
+# New function for drawing centered text
+def draw_text_centered(text, text_font, text_column, y):
+    img = text_font.render(text, True, text_column)
+    text_rect = img.get_rect(center=(screen_width // 2, y))
+    screen.blit(img, text_rect)
 
 # brick wall class
 class Wall:
@@ -136,22 +133,27 @@ class Wall:
                 pygame.draw.rect(screen, block_col, block[0])
                 pygame.draw.rect(screen, bg, (block[0]), 2)
 
-
 # paddle class
 class Paddle():
     def __init__(self):
         self.direction = 1
         self.reset()
+        self.target_x = self.rect.centerx  # target position from touch input
 
     def move(self):
-        self.direction = 0
-        key = pygame.key.get_pressed()
-        if key[pygame.K_LEFT] and self.rect.left > 0:
-            self.rect.x -= self.speed
-            self.direction = -1
-        if key[pygame.K_RIGHT] and self.rect.right < screen_width:
-            self.rect.x += self.speed
-            self.direction = 1
+        # Smoothly interpolate toward target_x
+        dx = self.target_x - self.rect.centerx
+        self.rect.x += int(dx * 0.2)  # adjust smoothing factor (0.2 = 20%)
+        # Clamp inside screen
+        if self.rect.left < 0:
+            self.rect.left = 0
+        if self.rect.right > screen_width:
+            self.rect.right = screen_width
+        # Update direction for ball spin effect
+        self.direction = 1 if dx > 0 else (-1 if dx < 0 else 0)
+
+    def set_target(self, x):
+        self.target_x = x
 
     def draw(self):
         pygame.draw.rect(screen, paddle_col, self.rect)
@@ -161,11 +163,12 @@ class Paddle():
         self.height = 20
         self.width = int(screen_width / cols)
         self.x = int((screen_width / 2) - (self.width / 2))
-        self.y = screen_height - (self.height * 2)
+        # Keep paddle above the game area (not inside touchpad)
+        self.y = game_height - (self.height * 2)
         self.speed = 10
         self.rect = Rect(self.x, self.y, self.width, self.height)
         self.direction = 0
-
+        self.target_x = self.rect.centerx
 
 # ball class
 class GameBall:
@@ -216,7 +219,7 @@ class GameBall:
         if self.rect.left < 0 or self.rect.right > screen_width:
             self.speed_x *= -1
 
-        # check for collision with top and bottom of the screen
+        # check for collision with top of the game area
         if self.rect.top < 0:
             self.speed_y *= -1
 
@@ -240,8 +243,8 @@ class GameBall:
         self.rect.x += self.speed_x
         self.rect.y += self.speed_y
 
-        # Check for ball missing the paddle (game lost condition)
-        if self.rect.bottom > screen_height:
+        # Check for ball missing the paddle (game lost condition) against game area height
+        if self.rect.bottom > game_height:
             self.game_over = -1
 
         return self.game_over
@@ -262,7 +265,6 @@ class GameBall:
         self.speed_max = 5
         self.game_over = 0
 
-
 # create a wall
 wall = Wall()
 wall.create_wall()
@@ -282,15 +284,27 @@ while run:
 
     screen.fill(bg)
 
-    # draw all objects
+    # draw game area objects
     wall.draw_wall()
     player_paddle.draw()
     ball.draw()
 
+    # draw touchpad zone
+    pygame.draw.rect(screen, touchpad_bg, (0, game_height, screen_width, touchpad_height))
+
+    # Show touchpad instructions ONLY when game is not running
+    if not live_ball:
+        msg = "Touch here to start, move paddle"
+        text_surface = font.render(msg, True, text_col)
+        text_rect = text_surface.get_rect(center=(screen_width // 2,
+                                                game_height + touchpad_height // 2))
+        screen.blit(text_surface, text_rect)
+
+
     if live_ball:
-        # draw paddle
+        # move paddle via smooth target following
         player_paddle.move()
-        # draw ball
+        # move ball
         game_over = ball.move()
         if game_over != 0:
             live_ball = False
@@ -305,13 +319,13 @@ while run:
     # print player instructions
     if not live_ball:
         if game_over == 0:
-            draw_text('CLICK ANYWHERE TO START', font, text_col, 100, screen_height // 2 + 100)
+            draw_text_centered('BreakOut 3', title_font, text_col, game_height // 2 + 100)
         elif game_over == 1:
-            draw_text('YOU WON!', font, text_col, 240, screen_height // 2 + 50)
-            draw_text('CLICK ANYWHERE TO START', font, text_col, 100, screen_height // 2 + 100)
+            draw_text('YOU WON!', font, text_col, 240, game_height // 2 + 200)
+            draw_text_centered('BreakOut 3', title_font, text_col, game_height // 2 + 100)
         elif game_over == -1:
-            draw_text('YOU LOST!', font, text_col, 240, screen_height // 2 + 50)
-            draw_text('CLICK ANYWHERE TO START', font, text_col, 100, screen_height // 2 + 100)
+            draw_text('YOU LOST!', font, text_col, 240, game_height // 2 + 200)
+            draw_text_centered('BreakOut 3', title_font, text_col, game_height // 2 + 100)
 
     # Event handler
     for event in pygame.event.get():
@@ -323,6 +337,30 @@ while run:
             player_paddle.reset()
             wall.create_wall()
             sound_played = False # Reset the sound flag for the new round
+        # Touchpad control (mouse/touch motion)
+        if event.type == pygame.MOUSEMOTION:
+            # Only register touches in bottom 200px (touchpad zone)
+            if event.pos[1] >= game_height:
+                player_paddle.set_target(event.pos[0])
+
+            # -----------------------------------------------------
+    # Keyboard Controls (Left / Right Arrow Keys)
+    # -----------------------------------------------------
+    keys = pygame.key.get_pressed()
+
+    if keys[pygame.K_LEFT]:
+        player_paddle.rect.x -= player_paddle.speed
+        player_paddle.target_x = player_paddle.rect.centerx  # keep touch control synced
+
+    if keys[pygame.K_RIGHT]:
+        player_paddle.rect.x += player_paddle.speed
+        player_paddle.target_x = player_paddle.rect.centerx  # keep touch control synced
+
+    # Clamp paddle inside screen
+    if player_paddle.rect.left < 0:
+        player_paddle.rect.left = 0
+    if player_paddle.rect.right > screen_width:
+        player_paddle.rect.right = screen_width
 
     pygame.display.update()
 

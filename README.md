@@ -8,6 +8,7 @@ BREAKOUT3 WRITTEN IN PYTHON
 
 * A Python based game where you eliminate blocks by hitting them with a ball. 
 * For macOS, Debian based Linux.
+* NOW SUPPORTS TOUCHSCREEN, MOUSE!
 * Uses pygame, pyinstaller to build play.
 * To run the project from source, from working directory:
 

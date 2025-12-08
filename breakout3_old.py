@@ -1,28 +1,51 @@
 import pygame
 from pygame.locals import *
+import sys
+import os
 
+# Get the correct path for bundled resources (PyInstaller)
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# Initialize Pygame and the mixer
+# pre_init helps avoid sound lag on some systems
+pygame.mixer.pre_init(44100, -16, 2, 512) 
 pygame.init()
+pygame.mixer.init()
 
-screen_width = 600
-screen_height = 600
+screen_width = 650
+screen_height = 650
 
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption('Breakout')
+
+# Set custom dock icon (MUST be done AFTER set_mode on macOS!)
+try:
+    icon = pygame.image.load(resource_path('breakout3.png'))
+    pygame.display.set_icon(icon)
+except Exception as e:
+    print(f"Could not load custom icon: {e}")
 
 # define font
 font = pygame.font.SysFont('Constantia', 30)
 
 # define colours
-bg = (234, 218, 184)
+bg = (0, 0, 0)
 # block colours
-block_red = (242, 85, 96)
-block_green = (86, 174, 87)
-block_blue = (69, 177, 232)
+block_red = (255, 27, 145)
+block_green = (139, 255, 74)
+block_blue = (0, 188, 255)
 # paddle colours
-paddle_col = (142, 135, 123)
-paddle_outline = (100, 100, 100)
+paddle_col = (171, 71, 188)
+paddle_outline = (171, 71, 188)
 # text colour
-text_col = (78, 81, 139)
+text_col = (0, 251, 115)
 
 # define game variables
 cols = 6
@@ -30,7 +53,42 @@ rows = 6
 clock = pygame.time.Clock()
 fps = 60
 live_ball = False
-game_over = 0
+game_over = 0 # 0 is playing, 1 is won, -1 is lost
+
+# -----------------------------------------------------
+# Sound Loading Section - Now using WAV files
+# -----------------------------------------------------
+sounds_loaded = False
+try:
+    # Try .wav files first (converted format) - using resource_path for PyInstaller
+    SND_PADDLE = pygame.mixer.Sound(resource_path('sounds/ball.wav'))
+    SND_BLOCK = pygame.mixer.Sound(resource_path('sounds/block.wav'))
+    SND_GAMEOVER = pygame.mixer.Sound(resource_path('sounds/lost.wav'))
+    SND_WIN = pygame.mixer.Sound(resource_path('sounds/won.wav'))
+    sounds_loaded = True
+    print("✓ All sound files loaded successfully (WAV format)!")
+except:
+    try:
+        # Fall back to original formats
+        SND_PADDLE = pygame.mixer.Sound(resource_path('sounds/ball.aif'))
+        SND_BLOCK = pygame.mixer.Sound(resource_path('sounds/block.caf'))
+        SND_GAMEOVER = pygame.mixer.Sound(resource_path('sounds/lost.aif'))
+        SND_WIN = pygame.mixer.Sound(resource_path('sounds/won.aif'))
+        sounds_loaded = True
+        print("✓ All sound files loaded successfully (original format)!")
+    except pygame.error as e:
+        print(f"⚠️  Error loading sound files: {e}")
+        print("Game will continue without sounds.")
+        print("\nTo fix this, convert your sounds to WAV format:")
+        print("1. Install ffmpeg: brew install ffmpeg")
+        print("2. Run the converter script to create .wav files")
+        # Create dummy sound objects
+        class DummySound:
+            def play(self): pass
+        SND_PADDLE = DummySound()
+        SND_BLOCK = DummySound()
+        SND_GAMEOVER = DummySound()
+        SND_WIN = DummySound()
 
 
 # function for outputting text onto the screen
@@ -47,37 +105,28 @@ class Wall:
         self.height = 50
 
     def create_wall(self):
-        # define an empty list for an individual block
+        self.blocks = []  # Clear existing blocks
         for row in range(rows):
-            # reset the block row list
             block_row = []
-            # iterate through each column in that row
             for col in range(cols):
-                # generate x and y positions for each block and create a rectangle from that
                 block_x = col * self.width
                 block_y = row * self.height
                 rect = pygame.Rect(block_x, block_y, self.width, self.height)
-                # Create base for strength
                 strength = 0
-                # assign block strength based on row
                 if row < 2:
                     strength += 3
                 elif row < 4:
                     strength += 2
                 elif row < 6:
                     strength += 1
-                # create a list at this point to store the rect and colour data
                 block_individual = [rect, strength]
-                # append that individual block to the block row
                 block_row.append(block_individual)
-            # append the row to the full list of blocks
             self.blocks.append(block_row)
 
     def draw_wall(self):
         for row in self.blocks:
             for block in row:
                 block_col = bg
-                # assign a colour based on block strength
                 if block[1] == 3:
                     block_col = block_blue
                 elif block[1] == 2:
@@ -95,7 +144,6 @@ class Paddle():
         self.reset()
 
     def move(self):
-        # reset movement direction
         self.direction = 0
         key = pygame.key.get_pressed()
         if key[pygame.K_LEFT] and self.rect.left > 0:
@@ -103,13 +151,13 @@ class Paddle():
             self.direction = -1
         if key[pygame.K_RIGHT] and self.rect.right < screen_width:
             self.rect.x += self.speed
+            self.direction = 1
 
     def draw(self):
         pygame.draw.rect(screen, paddle_col, self.rect)
         pygame.draw.rect(screen, paddle_outline, self.rect, 3)
 
     def reset(self):
-        # define paddle variables
         self.height = 20
         self.width = int(screen_width / cols)
         self.x = int((screen_width / 2) - (self.width / 2))
@@ -127,13 +175,15 @@ class GameBall:
     def move(self):
         # collision threshold
         collision_thresh = 5
-
-        # start off with the assumption that the wall has been destroyed completely
         wall_destroyed = 1
+        
         for row_count, row in enumerate(wall.blocks):
             for item_count, item in enumerate(row):
                 # check collision
                 if self.rect.colliderect(item[0]):
+                    # Play block hit sound
+                    SND_BLOCK.play()
+                    
                     # check if collision was from above
                     if abs(self.rect.bottom - item[0].top) < collision_thresh and self.speed_y > 0:
                         self.speed_y *= -1
@@ -150,12 +200,15 @@ class GameBall:
                     if wall.blocks[row_count][item_count][1] > 1:
                         wall.blocks[row_count][item_count][1] -= 1
                     else:
-                        wall.blocks[row_count][item_count][0] = (0, 0, 0, 0)
+                        # Make block disappear (set to an empty rect)
+                        wall.blocks[row_count][item_count][0] = pygame.Rect(0, 0, 0, 0)
+                        wall.blocks[row_count][item_count][1] = 0
 
                 # check if block still exists, in which case the wall is not destroyed
-                if wall.blocks[row_count][item_count][0] != (0, 0, 0, 0):
+                if wall.blocks[row_count][item_count][1] > 0:
                     wall_destroyed = 0
-        # after iterating through all the blocks, check if the wall is destroyed
+        
+        # Check if the wall is destroyed (game won)
         if wall_destroyed == 1:
             self.game_over = 1
 
@@ -166,11 +219,13 @@ class GameBall:
         # check for collision with top and bottom of the screen
         if self.rect.top < 0:
             self.speed_y *= -1
-        if self.rect.bottom > screen_height:
-            self.game_over = -1
 
         # look for collision with paddle
         if self.rect.colliderect(player_paddle):
+            # Play paddle hit sound (only when ball is coming down)
+            if self.speed_y > 0: 
+                 SND_PADDLE.play()
+
             # check if colliding from the top
             if abs(self.rect.bottom - player_paddle.rect.top) < collision_thresh and self.speed_y > 0:
                 self.speed_y *= -1
@@ -184,6 +239,10 @@ class GameBall:
 
         self.rect.x += self.speed_x
         self.rect.y += self.speed_y
+
+        # Check for ball missing the paddle (game lost condition)
+        if self.rect.bottom > screen_height:
+            self.game_over = -1
 
         return self.game_over
 
@@ -215,6 +274,8 @@ player_paddle = Paddle()
 ball = GameBall(player_paddle.x + (player_paddle.width // 2), player_paddle.y - player_paddle.height)
 
 run = True
+sound_played = False # Flag to ensure game over/win sound plays only once
+
 while run:
 
     clock.tick(fps)
@@ -233,6 +294,13 @@ while run:
         game_over = ball.move()
         if game_over != 0:
             live_ball = False
+            # Play game over sound when game_over is set to -1 (lost) or 1 (won)
+            if not sound_played:
+                if game_over == -1:
+                    SND_GAMEOVER.play()
+                elif game_over == 1:
+                    SND_WIN.play()
+                sound_played = True
 
     # print player instructions
     if not live_ball:
@@ -245,14 +313,16 @@ while run:
             draw_text('YOU LOST!', font, text_col, 240, screen_height // 2 + 50)
             draw_text('CLICK ANYWHERE TO START', font, text_col, 100, screen_height // 2 + 100)
 
+    # Event handler
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             run = False
-        if event.type == pygame.MOUSEBUTTONDOWN and not live_ball:
+        if event.type == pygame.MOUSEBUTTONDOWN and live_ball == False:
             live_ball = True
             ball.reset(player_paddle.x + (player_paddle.width // 2), player_paddle.y - player_paddle.height)
             player_paddle.reset()
             wall.create_wall()
+            sound_played = False # Reset the sound flag for the new round
 
     pygame.display.update()
 
