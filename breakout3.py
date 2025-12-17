@@ -321,10 +321,10 @@ while run:
         if game_over == 0:
             draw_text_centered('BreakOut 3', title_font, text_col, game_height // 2 + 100)
         elif game_over == 1:
-            draw_text('YOU WON!', font, text_col, 240, game_height // 2 + 200)
+            draw_text_centered('YOU WON!', font, text_col, game_height // 2 + 200)
             draw_text_centered('BreakOut 3', title_font, text_col, game_height // 2 + 100)
         elif game_over == -1:
-            draw_text('YOU LOST!', font, text_col, 240, game_height // 2 + 200)
+            draw_text_centered('YOU LOST!', font, text_col, game_height // 2 + 200)
             draw_text_centered('BreakOut 3', title_font, text_col, game_height // 2 + 100)
 
     # Event handler
